@@ -9,7 +9,7 @@
 ## Requirements
 To install the requirements, please run
 ```
-pip install ...
+pip install numpy scipy matplotlib tqdm
 ```
 in your terminal.
 
