@@ -102,13 +102,17 @@ NUM_RUNS = 256 # Number of times to run the model
 t_max = 128 # Final integration time (days)
 compartment_colours = ["green", "red", "black", "blue"] # Compartment colours for plotting
 opacities = [0.8, 0.5, 0.2] # Opacities for age groups for plotting
+np.random.seed(314159)
 
 
 if __name__ == "__main__":
+    print("# ---- Create_SIRV_Training_Data.py Start ---- #")
+
     # Uses the LaTeX Computer Modern Serif fonts for visualisations
     plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
 
     # ---- Single Run ----
+    print("Calculating a single run... ", end="")
     example_beta = [
         [0.6, 0.5, 0.2],
         [0.5, 0.4, 0.4],
@@ -116,9 +120,11 @@ if __name__ == "__main__":
     ]
     # Set plot_run to True to see a plot of the epideomiological system.
     t, S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, V2 = run_SIRV(beta=example_beta, plot_run=True)
+    print("Done.")
 
 
     # ---- Model Parameters For Multithreaded Runs ----
+    print(f"Running the model for {NUM_RUNS} runs... ", end="")
     # Using ProcessPoolExecutor with the number of CPU cores as max_workers
     SIRV_Model_Data = {
         # Each value in this dictionary will eventually have shape (NUM_RUNS, t_max)
@@ -138,18 +144,24 @@ if __name__ == "__main__":
             # Vertically stack the new results onto the existing arrays in the dictionary
             for key, result in zip(SIRV_Model_Data.keys(), results[1:]):  # Skip the first result 't'.
                 SIRV_Model_Data[key] = np.vstack((SIRV_Model_Data[key], result))
+    print("Done.\n")
 
+    print("Writing file to JSON... ", end="")
     # Write file to JSON as the data produced is very multidimensional
     with open("./SIRV_Model_Data.json", "w") as output_json:
         json.dump({key: value.tolist() for key, value in SIRV_Model_Data.items()}, output_json)
+    print("Done.")
 
     # Read a pre-saved SIRV_Model_Data JSON dictionary
+    print("Reading file from JSON... ", end="")
     with open("./SIRV_Model_Data.json", "r") as input_json:
         SIRV_Model_Data = json.load(input_json)
         SIRV_Model_Data = {key: np.array(value) for key, value in SIRV_Model_Data.items()}
+    print("Done.")
 
 
     # ---- Plot the compartment sizes across all runs with a 95% Credible Interval ----
+    print("Plotting multi-run results... ", end="")
     plt.figure(facecolor='w', figsize = (9, 4))
     t_grid = np.arange(start=0, stop=t_max, step=1)
     for i, (compartment_name, compartment_data) in enumerate(SIRV_Model_Data.items()):
@@ -166,3 +178,5 @@ if __name__ == "__main__":
     plt.tight_layout(rect=[0, 0, 0.875, 1])
     plt.legend(title="Compartments", loc="center left", bbox_to_anchor=(1, 0.5))
     plt.show()
+    print("Done.")
+    print("# ---- Program End. ---- #")
