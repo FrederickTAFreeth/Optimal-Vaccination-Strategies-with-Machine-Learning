@@ -1,5 +1,4 @@
 # #!/usr/bin/env python3
-
 # ---- Importing Libraries ----
 import os
 import numpy as np
@@ -21,11 +20,13 @@ def SIRV(t: float, y: List[float], alpha: List[float], beta: Union[np.ndarray,  
     N1 = S1 + I1 + R1 + V1
     N2 = S2 + I2 + R2 + V2
 
-    nu = np.random.uniform(low=0, high=1, size=3) # Stochastic infectious term
+    nu_0 = np.random.beta(a=2, b=5, size=None) # Stochastic infectious term
+    nu_1 = np.random.beta(a=2, b=2, size=None) # Stochastic infectious term
+    nu_2 = np.random.beta(a=5, b=1, size=None) # Stochastic infectious term
 
-    age_group_0_inf_force = (beta[0][0]*S0*I0/N0 + beta[0][1]*S0*I1/N1 + beta[0][2]*S0*I2/N2)*nu[0]
-    age_group_1_inf_force = (beta[1][0]*S1*I0/N0 + beta[1][1]*S1*I1/N1 + beta[1][2]*S1*I2/N2)*nu[1]
-    age_group_2_inf_force = (beta[2][0]*S2*I0/N0 + beta[2][1]*S2*I1/N1 + beta[2][2]*S2*I2/N2)*nu[2]
+    age_group_0_inf_force = (beta[0][0]*S0*I0/N0 + beta[0][1]*S0*I1/N1 + beta[0][2]*S0*I2/N2)*nu_0
+    age_group_1_inf_force = (beta[1][0]*S1*I0/N0 + beta[1][1]*S1*I1/N1 + beta[1][2]*S1*I2/N2)*nu_1
+    age_group_2_inf_force = (beta[2][0]*S2*I0/N0 + beta[2][1]*S2*I1/N1 + beta[2][2]*S2*I2/N2)*nu_2
 
     dS0dt = alpha[0]*S0 - delta[0]*S0 - age_group_0_inf_force - rho[0]*S0 + kappa[0]*V0 - theta[0]*S0
     dI0dt = -delta[0]*I0 + age_group_0_inf_force - gamma[0]*I0 - theta[0]*I0
@@ -98,7 +99,7 @@ def run_SIRV(beta: Union[np.ndarray,  List[List[float]]], plot_run: bool=False) 
 
 # ---- Global Parameters ----
 NUM_CPU_CORES = os.cpu_count() # Number of CPU cores
-NUM_RUNS = 256 # Number of times to run the model
+NUM_RUNS = 64 # Number of times to run the model
 t_max = 128 # Final integration time (days)
 compartment_colours = ["green", "red", "black", "blue"] # Compartment colours for plotting
 opacities = [0.8, 0.5, 0.2] # Opacities for age groups for plotting
@@ -146,8 +147,9 @@ if __name__ == "__main__":
                 SIRV_Model_Data[key] = np.vstack((SIRV_Model_Data[key], result))
     print("Done.\n")
 
-    print("Writing file to JSON... ", end="")
+
     # Write file to JSON as the data produced is very multidimensional
+    print("Writing file to JSON... ", end="")
     with open("./SIRV_Model_Data.json", "w") as output_json:
         json.dump({key: value.tolist() for key, value in SIRV_Model_Data.items()}, output_json)
     print("Done.")
