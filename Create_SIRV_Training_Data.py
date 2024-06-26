@@ -20,13 +20,9 @@ def SIRV(t: float, y: List[float], alpha: List[float], beta: Union[np.ndarray,  
     N1 = S1 + I1 + R1 + V1
     N2 = S2 + I2 + R2 + V2
 
-    nu_0 = np.random.beta(a=2, b=5, size=None) # Stochastic infectious term
-    nu_1 = np.random.beta(a=2, b=2, size=None) # Stochastic infectious term
-    nu_2 = np.random.beta(a=5, b=1, size=None) # Stochastic infectious term
-
-    age_group_0_inf_force = (beta[0][0]*S0*I0/N0 + beta[0][1]*S0*I1/N1 + beta[0][2]*S0*I2/N2)*nu_0
-    age_group_1_inf_force = (beta[1][0]*S1*I0/N0 + beta[1][1]*S1*I1/N1 + beta[1][2]*S1*I2/N2)*nu_1
-    age_group_2_inf_force = (beta[2][0]*S2*I0/N0 + beta[2][1]*S2*I1/N1 + beta[2][2]*S2*I2/N2)*nu_2
+    age_group_0_inf_force = (beta[0][0]*S0*I0/N0 + beta[0][1]*S0*I1/N1 + beta[0][2]*S0*I2/N2)
+    age_group_1_inf_force = (beta[1][0]*S1*I0/N0 + beta[1][1]*S1*I1/N1 + beta[1][2]*S1*I2/N2)
+    age_group_2_inf_force = (beta[2][0]*S2*I0/N0 + beta[2][1]*S2*I1/N1 + beta[2][2]*S2*I2/N2)
 
     dS0dt = alpha[0]*S0 - delta[0]*S0 - age_group_0_inf_force - rho[0]*S0 + kappa[0]*V0 - theta[0]*S0
     dI0dt = -delta[0]*I0 + age_group_0_inf_force - gamma[0]*I0 - theta[0]*I0
