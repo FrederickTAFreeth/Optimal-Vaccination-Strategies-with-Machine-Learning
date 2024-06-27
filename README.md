@@ -1,6 +1,7 @@
 # Optimal Vaccination Strategies For Influenza Viruses With Machine Learning
 
 ## Introduction
+In this work, we aim to identify optimal strategies for vaccine allocation to prevent large-scale influenza epidemics as they emerge. 
 
 ## The Mathematical Model
 We implement a classic population-based SIRV (Susceptible, Infected, Removed/Deceased, and Vaccinated) epidemiological model with three age groups `0`, `1`, and `2`. Age group `0` is defined by those in who are between 0 and 18 years of age, age group `1` are those between 18 and 65 years of age, and age group `2` are those over 65. Our model is defined for each age group $`i={0, 1, 2}`$:
