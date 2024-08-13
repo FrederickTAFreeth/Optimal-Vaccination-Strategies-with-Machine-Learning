@@ -13,7 +13,7 @@ from typing import Union, List, Tuple
 # pip install numpy scipy matplotlib tqdm
 
 # ---- The SIRV model differential equations ----
-def SIRV(t: float, y: List[float], alpha: List[float], beta: Union[np.ndarray, List[List[float]]], gamma: List[float], delta: List[float], theta: List[float], rho: List[float], kappa: List[float]) -> List[float]:
+def SIRV(t: float, y: List[float], alpha: List[float], beta: Union[np.ndarray, List[List[float]]], gamma: List[float], delta: List[float], theta: List[float], rho: List[float], kappa: List[float], tau: List[float]) -> List[float]:
     S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, V2, S3, I3, R3, V3, S4, I4, R4, V4, S5, I5, R5, V5 = y
 
     N0 = S0 + I0 + R0 + V0
@@ -30,33 +30,33 @@ def SIRV(t: float, y: List[float], alpha: List[float], beta: Union[np.ndarray, L
     age_group_4_inf_force = (beta[4][0]*S4*I0/N0 + beta[4][1]*S4*I1/N1 + beta[4][2]*S4*I2/N2 + beta[4][3]*S4*I3/N3 + beta[4][4]*S4*I4/N4 + beta[4][5]*S4*I5/N5)
     age_group_5_inf_force = (beta[5][0]*S5*I0/N0 + beta[5][1]*S5*I1/N1 + beta[5][2]*S5*I2/N2 + beta[5][3]*S5*I3/N3 + beta[5][4]*S5*I4/N4 + beta[5][5]*S5*I5/N5)
 
-    dS0dt = alpha[0]*S0 - delta[0]*S0 - age_group_0_inf_force - rho[0]*S0 + kappa[0]*V0 - theta[0]*S0
-    dI0dt = -delta[0]*I0 + age_group_0_inf_force - gamma[0]*I0 - theta[0]*I0
+    dS0dt = alpha[0]*S0 - delta[0]*S0 - age_group_0_inf_force - rho[0]*S0 + kappa[0]*V0 - theta[0]*S0 + tau[0]*I0
+    dI0dt = -delta[0]*I0 + age_group_0_inf_force - gamma[0]*I0 - theta[0]*I0 - tau[0]*I0
     dR0dt = delta[0]*(S0 + I0 + V0) + gamma[0]*I0 - theta[0]*R0
     dV0dt = rho[0]*S0 - kappa[0]*V0 - delta[0]*V0 - theta[0]*V0
 
-    dS1dt = alpha[1]*S1 - delta[1]*S1 - age_group_1_inf_force - rho[1]*S1 + kappa[1]*V1 + theta[0]*S0 - theta[1]*S1
-    dI1dt = -delta[1]*I1 + age_group_1_inf_force - gamma[1]*I1 + theta[0]*I0 - theta[1]*I1
+    dS1dt = alpha[1]*S1 - delta[1]*S1 - age_group_1_inf_force - rho[1]*S1 + kappa[1]*V1 + theta[0]*S0 - theta[1]*S1 + tau[1]*I1
+    dI1dt = -delta[1]*I1 + age_group_1_inf_force - gamma[1]*I1 + theta[0]*I0 - theta[1]*I1 - tau[1]*I1
     dR1dt = delta[1]*(S1 + I1 + V1) + gamma[1]*I1 + theta[0]*R0 - theta[1]*R1
     dV1dt = rho[1]*S1 - kappa[1]*V1 - delta[1]*V1 + theta[0]*V0 - theta[1]*V1
 
-    dS2dt = alpha[2]*S2 - delta[2]*S2 - age_group_2_inf_force - rho[2]*S2 + kappa[2]*V2 + theta[1]*S1 - theta[2]*S2
-    dI2dt = -delta[2]*I2 + age_group_2_inf_force - gamma[2]*I2 + theta[1]*I1 - theta[2]*I2
+    dS2dt = alpha[2]*S2 - delta[2]*S2 - age_group_2_inf_force - rho[2]*S2 + kappa[2]*V2 + theta[1]*S1 - theta[2]*S2 + tau[2]*I2
+    dI2dt = -delta[2]*I2 + age_group_2_inf_force - gamma[2]*I2 + theta[1]*I1 - theta[2]*I2 - tau[2]*I2
     dR2dt = delta[2]*(S2 + I2 + V2) + gamma[2]*I2 + theta[1]*R1 - theta[2]*R2
     dV2dt = rho[2]*S2 - kappa[2]*V2 - delta[2]*V2 + theta[1]*V1 - theta[2]*V2
 
-    dS3dt = alpha[3]*S3 - delta[3]*S3 - age_group_3_inf_force - rho[3]*S3 + kappa[3]*V3 + theta[2]*S2 - theta[3]*S3
-    dI3dt = -delta[3]*I3 + age_group_3_inf_force - gamma[3]*I3 + theta[2]*I2 - theta[3]*I3
+    dS3dt = alpha[3]*S3 - delta[3]*S3 - age_group_3_inf_force - rho[3]*S3 + kappa[3]*V3 + theta[2]*S2 - theta[3]*S3 + tau[3]*I3
+    dI3dt = -delta[3]*I3 + age_group_3_inf_force - gamma[3]*I3 + theta[2]*I2 - theta[3]*I3 - tau[3]*I3
     dR3dt = delta[3]*(S3 + I3 + V3) + gamma[3]*I3 + theta[2]*R2 - theta[3]*R3
     dV3dt = rho[3]*S3 - kappa[3]*V3 - delta[3]*V3 + theta[2]*V2 - theta[3]*V3
 
-    dS4dt = alpha[4]*S4 - delta[4]*S4 - age_group_4_inf_force - rho[4]*S4 + kappa[4]*V4 + theta[3]*S3 - theta[4]*S4
-    dI4dt = -delta[4]*I4 + age_group_4_inf_force - gamma[4]*I4 + theta[3]*I3 - theta[4]*I4
+    dS4dt = alpha[4]*S4 - delta[4]*S4 - age_group_4_inf_force - rho[4]*S4 + kappa[4]*V4 + theta[3]*S3 - theta[4]*S4 + tau[4]*I4
+    dI4dt = -delta[4]*I4 + age_group_4_inf_force - gamma[4]*I4 + theta[3]*I3 - theta[4]*I4 - tau[4]*I4
     dR4dt = delta[4]*(S4 + I4 + V4) + gamma[4]*I4 + theta[3]*R3 - theta[4]*R4
     dV4dt = rho[4]*S4 - kappa[4]*V4 - delta[4]*V4 + theta[3]*V3 - theta[4]*V4
 
-    dS5dt = alpha[5]*S5 - delta[5]*S5 - age_group_5_inf_force - rho[5]*S5 + kappa[5]*V5 + theta[4]*S4
-    dI5dt = -delta[5]*I5 + age_group_5_inf_force - gamma[5]*I5 + theta[4]*I4
+    dS5dt = alpha[5]*S5 - delta[5]*S5 - age_group_5_inf_force - rho[5]*S5 + kappa[5]*V5 + theta[4]*S4 + tau[5]*I5
+    dI5dt = -delta[5]*I5 + age_group_5_inf_force - gamma[5]*I5 + theta[4]*I4 - tau[5]*I5
     dR5dt = delta[5]*(S5 + I5 + V5) + gamma[5]*I5 + theta[4]*R4
     dV5dt = rho[5]*S5 - kappa[5]*V5 - delta[5]*V5 + theta[4]*V4
 
@@ -65,13 +65,13 @@ def SIRV(t: float, y: List[float], alpha: List[float], beta: Union[np.ndarray, L
 
 # ---- Running the SIRV ODE system ----
 def run_SIRV(beta: Union[np.ndarray, List[List[float]]], plot_run: bool=False) -> Tuple[List[float]]:
-    N0, N1, N2, N3, N4, N5 = 1000, 2000, 3000, 2500, 1500, 750 # Initial age group population sizes
-    I0_t0, R0_t0, V0_t0 = 1, 0, 0 # Initial compartment sizes of age group 0
-    I1_t0, R1_t0, V1_t0 = 1, 0, 0 # Initial compartment sizes of age group 1
-    I2_t0, R2_t0, V2_t0 = 1, 0, 0 # Initial compartment sizes of age group 2
-    I3_t0, R3_t0, V3_t0 = 1, 0, 0 # Initial compartment sizes of age group 3
-    I4_t0, R4_t0, V4_t0 = 1, 0, 0 # Initial compartment sizes of age group 4
-    I5_t0, R5_t0, V5_t0 = 1, 0, 0 # Initial compartment sizes of age group 5
+    N0, N1, N2, N3, N4, N5 = 1060*(10**3), 1265*(10**3), 1642*(10**3), 4857*(10**3), 3312*(10**3), 2477*(10**3) # Initial age group population sizes
+    I0_t0, R0_t0, V0_t0 = 0, 0, 0 # Initial compartment sizes of age group 0
+    I1_t0, R1_t0, V1_t0 = 0, 0, 0 # Initial compartment sizes of age group 1
+    I2_t0, R2_t0, V2_t0 = 0, 0, 0 # Initial compartment sizes of age group 2
+    I3_t0, R3_t0, V3_t0 = 0, 0, 0 # Initial compartment sizes of age group 3
+    I4_t0, R4_t0, V4_t0 = 1000, 0, 0 # Initial compartment sizes of age group 4
+    I5_t0, R5_t0, V5_t0 = 0, 0, 0 # Initial compartment sizes of age group 5
     S0_t0 = N0 - I0_t0 - R0_t0 - V0_t0
     S1_t0 = N1 - I1_t0 - R1_t0 - V1_t0
     S2_t0 = N2 - I2_t0 - R2_t0 - V2_t0
@@ -79,11 +79,12 @@ def run_SIRV(beta: Union[np.ndarray, List[List[float]]], plot_run: bool=False) -
     S4_t0 = N4 - I4_t0 - R4_t0 - V4_t0
     S5_t0 = N5 - I5_t0 - R5_t0 - V5_t0
     alpha = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # Mean birth rate (in 1/days) for each age group.
-    gamma = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] # Mean death rate from infection (in 1/days) for each age group.
+    gamma = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # Mean death rate from infection (in 1/days) for each age group.
     delta = [0.001, 0.005, 0.007, 0.009, 0.011, 0.013] # Mean death rate from natural causes (in 1/days) for each age group.
     theta = [1/(365 * 5), 1/(365 * (12 - 5)), 1/(365 * (19 - 12)), 1/(365 * (39 - 19)), 1/(365 * (59 - 39))] # Rate of aging in 1/days.
     rho = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # Vaccination rate (in 1/days)
-    kappa = [0.04, 0.04, 0.04, 0.04, 0.04, 0.04] # Loss of vaccination protection (in 1/days)
+    kappa = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0] # Loss of vaccination protection (in 1/days)
+    tau = [0.286, 0.286, 0.286, 0.286, 0.286, 0.286] # Recovery rate, (1/days)
     t = np.linspace(0, t_max, t_max) # A grid of time points (in days)
 
     # Initial conditions vector of each SIRV compartment for each age group
@@ -91,7 +92,7 @@ def run_SIRV(beta: Union[np.ndarray, List[List[float]]], plot_run: bool=False) -
 
     # ---- Integrate the SIRV equations over the time grid, t ----
     sol = scipy.integrate.solve_ivp(
-        fun=SIRV, t_span=(t[0], t[-1]), y0=y_t0, args=(alpha, beta, gamma, delta, theta, rho, kappa),
+        fun=SIRV, t_span=(t[0], t[-1]), y0=y_t0, args=(alpha, beta, gamma, delta, theta, rho, kappa, tau),
         dense_output=True, method="RK45"
     )
     S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, V2, S3, I3, R3, V3, S4, I4, R4, V4, S5, I5, R5, V5 = sol.sol(t)
@@ -144,8 +145,8 @@ def run_SIRV(beta: Union[np.ndarray, List[List[float]]], plot_run: bool=False) -
 
 # ---- Global Parameters ----
 NUM_CPU_CORES = os.cpu_count() # Number of CPU cores
-NUM_RUNS = 64 # Number of times to run the model
-t_max = 128 # Final integration time (days)
+NUM_RUNS = 2048 # Number of times to run the model
+t_max = 64 # Final integration time (days)
 compartment_colours = ["green", "red", "black", "blue"] # Compartment colours for plotting
 opacities = [1.0, 0.8, 0.6, 0.4, 0.2, 0.1] # Opacities for age groups for plotting
 np.random.seed(314159)
@@ -159,16 +160,16 @@ if __name__ == "__main__":
 
     # ---- Single Run ----
     print("Calculating a single run... ", end="")
-    example_beta = [
-        [0.23, 0.45, 0.67, 0.12, 0.89, 0.34],
-        [0.45, 0.78, 0.91, 0.11, 0.22, 0.33],
-        [0.67, 0.91, 0.66, 0.77, 0.88, 0.99],
-        [0.12, 0.11, 0.77, 0.45, 0.56, 0.67],
-        [0.89, 0.22, 0.88, 0.56, 0.34, 0.56],
-        [0.34, 0.33, 0.99, 0.67, 0.56, 0.23]
+    wallinga_betas = [
+        [1.393*(10**-7), 0.259*(10**-7), 0.146*(10**-7), 0.284*(10**-7), 0.130*(10**-7), 0.094*(10**-7)],
+        [0.259*(10**-7), 2.261*(10**-7), 0.266*(10**-7), 0.287*(10**-7), 0.170*(10**-7), 0.095*(10**-7)],
+        [0.146*(10**-7), 0.266*(10**-7), 1.847*(10**-7), 0.418*(10**-7), 0.309*(10**-7), 0.123*(10**-7)],
+        [0.284*(10**-7), 0.287*(10**-7), 0.418*(10**-7), 0.623*(10**-7), 0.407*(10**-7), 0.207*(10**-7)],
+        [0.130*(10**-7), 0.170*(10**-7), 0.309*(10**-7), 0.407*(10**-7), 0.504*(10**-7), 0.272*(10**-7)],
+        [0.094*(10**-7), 0.095*(10**-7), 0.123*(10**-7), 0.207*(10**-7), 0.272*(10**-7), 0.447*(10**-7)]
     ]
     # Set plot_run to True to see a plot of the epideomiological system.
-    t, S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, V2, S3, I3, R3, V3, S4, I4, R4, V4, S5, I5, R5, V5 = run_SIRV(beta=example_beta, plot_run=True)
+    t, S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, V2, S3, I3, R3, V3, S4, I4, R4, V4, S5, I5, R5, V5 = run_SIRV(beta=wallinga_betas, plot_run=True)
     print("Done.")
 
     # ---- Model Parameters For Multithreaded Runs ----
@@ -183,14 +184,12 @@ if __name__ == "__main__":
         "S_4": np.empty((0, t_max)), "I_4": np.empty((0, t_max)), "R_4": np.empty((0, t_max)), "V_4": np.empty((0, t_max)),
         "S_5": np.empty((0, t_max)), "I_5": np.empty((0, t_max)), "R_5": np.empty((0, t_max)), "V_5": np.empty((0, t_max))
     }
-    min_beta, max_beta = 0, 1
-    # This is a multidimentional version of the example beta matrix above.
-    betas = min_beta + (np.random.random(size=(NUM_RUNS, 6, 6)) * (max_beta - min_beta))
+    betas = [wallinga_betas for _ in range(NUM_RUNS)]
     with concurrent.futures.ProcessPoolExecutor(max_workers=min(NUM_CPU_CORES, NUM_RUNS)) as executor:
         futures = [executor.submit(run_SIRV, beta) for beta in betas]
         for i, f in enumerate(tqdm.tqdm(concurrent.futures.as_completed(futures), total=len(futures))):
             # Unpack the results and sort them into a dictonary to dump into a JSON file
-            results = f.result() # Tuple of t, S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, and V2 data
+            results = f.result() # Tuple of t, S0, I0, R0, V0, S1, I1, R1, V1, S2, I2, R2, and V2, ... data
             
             # Vertically stack the new results onto the existing arrays in the dictionary
             for key, result in zip(SIRV_Model_Data.keys(), results[1:]):  # Skip the first result 't'.
