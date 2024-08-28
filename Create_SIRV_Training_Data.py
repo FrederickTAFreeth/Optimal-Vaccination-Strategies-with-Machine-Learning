@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     # Extract the prevalence at a given day
     day_to_extract = 14
-    num_inf_at_day_to_extract = np.array([
+    prevalence_across_runs = np.array([
         SIRV_Model_Data["I_0"][:, day_to_extract - 1],
         SIRV_Model_Data["I_1"][:, day_to_extract - 1],
         SIRV_Model_Data["I_2"][:, day_to_extract - 1],
