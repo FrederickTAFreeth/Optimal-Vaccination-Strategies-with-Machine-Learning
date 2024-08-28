@@ -145,7 +145,7 @@ def run_SIRV(beta: Union[np.ndarray, List[List[float]]], plot_run: bool=False) -
 
 # ---- Global Parameters ----
 NUM_CPU_CORES = os.cpu_count() # Number of CPU cores
-NUM_RUNS = 2048 # Number of times to run the model
+NUM_RUNS = 128 # Number of times to run the model
 t_max = 64 # Final integration time (days)
 compartment_colours = ["green", "red", "black", "blue"] # Compartment colours for plotting
 opacities = [1.0, 0.8, 0.6, 0.4, 0.2, 0.1] # Opacities for age groups for plotting
@@ -196,6 +196,16 @@ if __name__ == "__main__":
                 SIRV_Model_Data[key] = np.vstack((SIRV_Model_Data[key], result))
     print("Done.\n")
 
+    # Extract the prevalence at a given day
+    day_to_extract = 14
+    num_inf_at_day_to_extract = np.array([
+        SIRV_Model_Data["I_0"][:, day_to_extract - 1],
+        SIRV_Model_Data["I_1"][:, day_to_extract - 1],
+        SIRV_Model_Data["I_2"][:, day_to_extract - 1],
+        SIRV_Model_Data["I_3"][:, day_to_extract - 1],
+        SIRV_Model_Data["I_4"][:, day_to_extract - 1],
+        SIRV_Model_Data["I_5"][:, day_to_extract - 1]
+    ])
 
     # Write file to JSON as the data produced is very multidimensional
     print("Writing file to JSON... ", end="")
