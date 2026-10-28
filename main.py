@@ -13,14 +13,28 @@ BibTex Reference:
 """
 
 # ---- Importing Libraries ----
+import os
 import numpy as np
 import tqdm
 import matplotlib.pyplot as plt
+import lightning as L
+import torch
 
+from torch import nn
+torch.set_float32_matmul_precision("high")
+from torch.utils.data import DataLoader
+from torch.utils.data import TensorDataset
+from torch.utils.data import random_split
+
+# To install depenancies:
+# python -m pip install -U triton-windows
+# pip install numpy matplotlib lightning tqdm
+# pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu132
 
 # ---- Global Parameters ----
 num_age_groups = 6 # Number of age groups
 
+# ---- Epidemic Model ----
 def SIRV(
     *,
     t_max: int=64,
@@ -344,8 +358,224 @@ def SIRV(
 
     return {"S": S, "I": I, "R": R, "V": V, "D": D, "D_infection": D_infection, "B": B}
 
+
+# ---- ML Models ----
+class EpidemicMLP(L.LightningModule):
+    """
+    Predict the unobserved epidemic trajectory from the first
+    n_observed_days of each simulation.
+
+    Expected batch shapes:
+        x: (batch_size, n_observed_days, num_features)
+        y: (batch_size, n_forecast_days, num_features)
+    """
+
+    def __init__(
+        self,
+        n_observed_days: int,
+        n_forecast_days: int,
+        num_features: int,
+        hidden_sizes: tuple[int, ...]=(256, 256),
+        learning_rate: float=1e-3
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        input_size = (n_observed_days * num_features)
+        output_size = (n_forecast_days * num_features)
+        layer_sizes = (input_size, *hidden_sizes, output_size)
+        layers = []
+        for layer_idx in range(len(layer_sizes) - 2):
+            layers.extend([
+                nn.Linear(
+                    layer_sizes[layer_idx],
+                    layer_sizes[layer_idx + 1]
+                ),
+                nn.ReLU()
+            ])
+        layers.append(
+            nn.Linear(
+                layer_sizes[-2],
+                layer_sizes[-1]
+            )
+        )
+        self.network = nn.Sequential(*layers)
+        self.loss_function = nn.MSELoss()
+
+    def forward(self, x):
+        batch_size = x.size(0)
+
+        # Flatten observed time points and features
+        x = x.reshape(batch_size, -1)
+        predictions = self.network(x)
+
+        # Restore time and feature dimensions
+        predictions = predictions.reshape(
+            batch_size,
+            self.hparams.n_forecast_days,
+            self.hparams.num_features
+        )
+        return predictions
+
+    def _shared_step(self, batch, stage):
+        x, y = batch
+        predictions = self(x)
+        loss = self.loss_function(predictions, y)
+        self.log(
+            f"{stage}_loss",
+            loss,
+            on_step=(stage == "train"),
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=x.size(0)
+        )
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        return self._shared_step(batch=batch, stage="train")
+
+    def validation_step(self, batch, batch_idx):
+        return self._shared_step(batch=batch, stage="val")
+
+    def test_step(self, batch, batch_idx):
+        return self._shared_step(batch=batch, stage="test")
+
+    def predict_step(self, batch, batch_idx):
+        x = (batch[0] if isinstance(batch, (tuple, list)) else batch)
+        return self(x)
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+
+
+class EpidemicTransformer(L.LightningModule):
+    """
+    Predict the unobserved epidemic trajectory from the first
+    n_observed_days using a Transformer encoder.
+
+    Expected batch shapes:
+        x: (batch_size, n_observed_days, num_features)
+        y: (batch_size, n_forecast_days, num_features)
+    """
+
+    def __init__(
+        self,
+        n_observed_days: int,
+        n_forecast_days: int,
+        num_features: int,
+        d_model: int=128,
+        nhead: int=4,
+        num_layers: int=2,
+        dim_feedforward: int=256,
+        dropout: float=0.1,
+        learning_rate: float=1e-3
+    ):
+        super().__init__()
+        self.save_hyperparameters()
+        if d_model % nhead != 0:
+            raise ValueError("d_model must be divisible by nhead")
+
+        # Project the epidemic features for each day into
+        # the Transformer embedding dimension.
+        self.input_projection = nn.Linear(num_features, d_model)
+
+        # Learned representation of the position of each observed day.
+        self.positional_embedding = nn.Parameter(torch.zeros(1, n_observed_days, d_model))
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True
+        )
+
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer=encoder_layer,
+            num_layers=num_layers,
+            norm=nn.LayerNorm(d_model),
+            enable_nested_tensor=False
+        )
+
+        # Convert the encoded epidemic into the complete
+        # future trajectory.
+        self.output_layer = nn.Linear(
+            n_observed_days * d_model,
+            n_forecast_days * num_features
+        )
+        self.loss_function = nn.MSELoss()
+
+    def forward(self, x):
+        batch_size = x.size(0)
+
+        # Project daily epidemic features into embedding space:
+        # (batch_size, n_observed_days, num_features)
+        # ->
+        # (batch_size, n_observed_days, d_model)
+        x = self.input_projection(x)
+
+        # Add the position of each observed day
+        x = (x + self.positional_embedding)
+
+        # Apply self-attention across the observed days
+        x = self.transformer_encoder(x)
+
+        # Flatten all observed days and embeddings:
+        # (batch_size, n_observed_days, d_model)
+        # ->
+        # (batch_size, n_observed_days * d_model)
+        x = torch.flatten(x, start_dim=1)
+
+        # Predict the complete future trajectory
+        predictions = self.output_layer(x)
+
+        # Restore forecast-day and feature dimensions
+        predictions = predictions.reshape(
+            batch_size,
+            self.hparams.n_forecast_days,
+            self.hparams.num_features
+        )
+        return predictions
+
+    def _shared_step(self, batch, stage):
+        x, y = batch
+        predictions = self(x)
+        loss = self.loss_function(predictions, y)
+        self.log(
+            f"{stage}_loss",
+            loss,
+            on_step=(stage == "train"),
+            on_epoch=True,
+            prog_bar=True,
+            batch_size=x.size(0)
+        )
+        return loss
+
+    def training_step(self, batch, batch_idx):
+        return self._shared_step(batch=batch, stage="train")
+
+    def validation_step(self, batch, batch_idx):
+        return self._shared_step(batch=batch, stage="val")
+
+    def test_step(self, batch, batch_idx):
+        return self._shared_step(batch=batch, stage="test")
+
+    def predict_step(self, batch, batch_idx):
+        x = (batch[0] if isinstance(batch, (tuple, list)) else batch)
+        return self(x)
+
+    def configure_optimizers(self):
+        return torch.optim.AdamW(
+            self.parameters(),
+            lr=self.hparams.learning_rate,
+            weight_decay=1e-5
+        )
+
+
 if __name__ == "__main__":
     print("\n# ---- Create_SIRV_Training_Data.py Start ---- #")
+    L.seed_everything(314159, workers=True)
 
     # Uses the LaTeX Computer Modern Serif fonts for visualisations
     plt.rcParams.update({"text.usetex": True, "font.family": "serif"})
@@ -365,7 +595,7 @@ if __name__ == "__main__":
         )/ (1 - influenza_fatality_probability)
     )
 
-    # ---- Run ----
+    # ---- Run Epidemic Model ----
     epi = SIRV(
         t_max=128, # 128 daily observations, including the initial state
         N_t0 = np.array([1060, 1265, 1642, 4857, 3312, 2477], dtype=int) * 10**3,
@@ -417,4 +647,248 @@ if __name__ == "__main__":
         plot_run=True
     )
 
+    # ---- Instantiate ML model ----
+    trajectory = np.concatenate([epi["S"], epi["I"], epi["R"], epi["V"], epi["D"]], axis=2).astype(np.float32)
+    n_observed_days = 14
+    n_forecast_days = (trajectory.shape[1] - n_observed_days)
+    population_scale = float(np.sum([1060, 1265, 1642, 4857, 3312, 2477]) * 10**3)
+    trajectory = (trajectory / population_scale)
+    x = trajectory[:, :n_observed_days, :]
+    y = trajectory[:, n_observed_days:, :]
+    print(x.shape) # (num_runs, n_observed_days, num_age_groups*5)
+    print(y.shape) # (num_runs, t_max - n_observed_days, num_age_groups*5)
+    model_architecture = "Transformer"
+    if model_architecture == "MLP":
+        model = EpidemicMLP(
+            n_observed_days=n_observed_days,
+            n_forecast_days=n_forecast_days,
+            num_features=num_age_groups * 5,
+            hidden_sizes=(256, 256),
+            learning_rate=1e-3
+        )
+    elif model_architecture == "Transformer":
+        model = EpidemicTransformer(
+            n_observed_days=n_observed_days,
+            n_forecast_days=n_forecast_days,
+            num_features=num_age_groups * 5,
+            d_model=64,
+            nhead=4,
+            num_layers=1,
+            dim_feedforward=128,
+            dropout=0.0,
+            learning_rate=1e-4
+        )
+    else:
+        raise ValueError(f"Unknown model architecture: {model_architecture}")
+
+    print(f"Selected ML architecture: {model_architecture}")
+
+    # ---- Convert Data to PyTorch Tensors ----
+    x = torch.from_numpy(x)
+    y = torch.from_numpy(y)
+    dataset = TensorDataset(x, y)
+
+    # ---- Split Dataset ----
+    num_samples = len(dataset)
+    num_train = int(0.70 * num_samples)
+    num_validation = int(0.15 * num_samples)
+    num_test = (num_samples - num_train - num_validation)
+    split_generator = torch.Generator().manual_seed(314159)
+    train_dataset, validation_dataset, test_dataset = random_split(
+        dataset=dataset,
+        lengths=[num_train, num_validation, num_test],
+        generator=split_generator
+    )
+    print(f"Training trajectories: {len(train_dataset)}")
+    print(f"Validation trajectories: {len(validation_dataset)}")
+    print(f"Test trajectories: {len(test_dataset)}")
+
+    # ---- Create Data Loaders ----
+    batch_size = 128
+    cpu_workers = 0 # Data is already in memory so dont need os.cpu_count() - 1
+    train_loader = DataLoader(
+        dataset=train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=cpu_workers,
+        persistent_workers=cpu_workers > 0,
+        pin_memory=torch.cuda.is_available()
+    )
+    validation_loader = DataLoader(
+        dataset=validation_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=cpu_workers,
+        persistent_workers=cpu_workers > 0,
+        pin_memory=torch.cuda.is_available()
+    )
+    test_loader = DataLoader(
+        dataset=test_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=cpu_workers,
+        persistent_workers=cpu_workers > 0,
+        pin_memory=torch.cuda.is_available()
+    )
+
+    # ---- Train ML Model ----
+    trainer = L.Trainer(
+        max_epochs=100,
+        accelerator="auto",
+        devices="auto",
+        deterministic=True,
+        log_every_n_steps=10
+    )
+
+    trainer.fit(
+        model=model,
+        train_dataloaders=train_loader,
+        val_dataloaders=validation_loader
+    )
+
+    # ---- Test ML Model ----
+    test_results = trainer.test(model=model, dataloaders=test_loader)
+    print("Test results:")
+    print(test_results)
+
+    # ---- Run ML Inference ----
+    prediction_batches = trainer.predict(model=model, dataloaders=test_loader)
+    predictions = torch.cat(prediction_batches, dim=0)
+    predictions = predictions.cpu().numpy()
+    print(f"Predicted trajectory shape: {predictions.shape}")
+
+    # ---- Collect Test Inputs and Targets ----
+    observed_input_batches = []
+    true_target_batches = []
+    for input_batch, target_batch in test_loader:
+        observed_input_batches.append(input_batch)
+        true_target_batches.append(target_batch)
+
+    observed_inputs = torch.cat(observed_input_batches, dim=0).numpy()
+    true_targets = torch.cat(true_target_batches, dim=0).numpy()
+    observed_counts = (observed_inputs * population_scale)
+    predicted_counts = (predictions * population_scale)
+    true_counts = (true_targets * population_scale)
+
+    # ---- Calculate Forecast Errors ----
+    forecast_errors = (predicted_counts - true_counts)
+    mae = np.mean(np.abs(forecast_errors))
+    rmse = np.sqrt(np.mean(forecast_errors**2))
+    print(f"Overall MAE: {mae:,.0f} people")
+    print(f"Overall RMSE: {rmse:,.0f} people")
+
+    # ---- Calculate Compartment Errors ----
+    feature_slices = {
+        "S": slice(0, 6),
+        "I": slice(6, 12),
+        "R": slice(12, 18),
+        "V": slice(18, 24),
+        "D": slice(24, 30)
+    }
+    for compartment_name, feature_slice in feature_slices.items():
+        compartment_errors = (predicted_counts[:, :, feature_slice] - true_counts[:, :, feature_slice])
+        compartment_mae = np.mean(np.abs(compartment_errors))
+        compartment_rmse = np.sqrt(np.mean(compartment_errors**2))
+        print(f"{compartment_name} MAE: {compartment_mae:,.0f} people")
+        print(f"{compartment_name} RMSE: {compartment_rmse:,.0f} people")
+
+    # ---- Check Forecast Validity ----
+    num_negative_predictions = np.count_nonzero(predicted_counts < 0)
+    minimum_prediction = predicted_counts.min()
+    print(f"Negative predictions: {num_negative_predictions:,}")
+    print(f"Minimum predicted population: {minimum_prediction:,.1f}")
+
+    # ---- Plot Median and Central 95% Forecast Intervals ----
+    # Sum infectious populations across all six age groups
+    observed_total_I = observed_counts[:, :, 6:12].sum(axis=2)
+    true_total_I = true_counts[:, :, 6:12].sum(axis=2)
+    predicted_total_I = predicted_counts[:, :, 6:12].sum(axis=2)
+
+    # Calculate the median and central 95% intervals across
+    # the held-out stochastic epidemic trajectories
+    observed_lower, observed_median, observed_upper = np.percentile(
+        observed_total_I, q=[2.5, 50.0, 97.5], axis=0
+    )
+    true_lower, true_median, true_upper = np.percentile(
+        true_total_I, q=[2.5, 50.0, 97.5], axis=0
+    )
+    predicted_lower, predicted_median, predicted_upper = np.percentile(
+        predicted_total_I, q=[2.5, 50.0, 97.5], axis=0
+    )
+    observed_time = np.arange(n_observed_days)
+    forecast_time = np.arange(n_observed_days, n_observed_days + n_forecast_days)
+    fig, ax = plt.subplots(figsize=(9, 4), facecolor="white")
+
+    # Observed epidemic interval
+    ax.fill_between(
+        observed_time,
+        observed_lower,
+        observed_upper,
+        color="black",
+        alpha=0.15,
+        linewidth=0,
+        label="Observed central 95% interval"
+    )
+
+    ax.plot(
+        observed_time,
+        observed_median,
+        color="black",
+        linewidth=1.5,
+        label="Observed median"
+    )
+
+    # True future epidemic interval
+    ax.fill_between(
+        forecast_time,
+        true_lower,
+        true_upper,
+        color="black",
+        alpha=0.15,
+        linewidth=0,
+        label="True central 95% interval"
+    )
+
+    ax.plot(
+        forecast_time,
+        true_median,
+        color="black",
+        linestyle="--",
+        linewidth=1.5,
+        label="True future median"
+    )
+
+    # Predicted future epidemic interval
+    ax.fill_between(
+        forecast_time,
+        predicted_lower,
+        predicted_upper,
+        color="red",
+        alpha=0.25,
+        linewidth=0,
+        label=f"{model_architecture} central 95% interval"
+    )
+
+    ax.plot(
+        forecast_time,
+        predicted_median,
+        color="red",
+        linewidth=1.5,
+        label=f"{model_architecture} predicted median"
+    )
+
+    # Forecast begins after the final observed time point
+    ax.axvline(
+        n_observed_days - 1,
+        color="grey",
+        linestyle=":",
+        linewidth=1.0,
+        label="Forecast origin"
+    )
+    ax.set_xlabel("Time, $t$ (Days)")
+    ax.set_ylabel("Total Infectious Population, $I(t)$")
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5))
+    fig.tight_layout()
+    plt.show()
+    
     print("# ---- Program End. ---- #\n")
